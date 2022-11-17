@@ -1,0 +1,170 @@
+
+<!DOCTYPE html
+  PUBLIC "-//W3C//DTD HTML 4.01 Transitional//EN">
+<html><head>
+      <meta http-equiv="Content-Type" content="text/html; charset=utf-8">
+   <!--
+This HTML is auto-generated from an M-file.
+To make changes, update the M-file and republish this document.
+      --><title>tf_agc - Time-frequency automatic gain control</title><meta name="generator" content="MATLAB 7.10"><meta name="date" content="2010-08-13"><meta name="m-file" content="demo_tf_agc"><style type="text/css">
+
+body {
+  background-color: white;
+  margin:10px;
+}
+
+h1 {
+  color: #990000; 
+  font-size: x-large;
+}
+
+h2 {
+  color: #990000;
+  font-size: medium;
+}
+
+/* Make the text shrink to fit narrow windows, but not stretch too far in 
+wide windows. */ 
+p,h1,h2,div.content div {
+  max-width: 600px;
+  /* Hack for IE6 */
+  width: auto !important; width: 600px;
+}
+
+pre.codeinput {
+  background: #EEEEEE;
+  padding: 10px;
+}
+@media print {
+  pre.codeinput {word-wrap:break-word; width:100%;}
+} 
+
+span.keyword {color: #0000FF}
+span.comment {color: #228B22}
+span.string {color: #A020F0}
+span.untermstring {color: #B20000}
+span.syscmd {color: #B28C00}
+
+pre.codeoutput {
+  color: #666666;
+  padding: 10px;
+}
+
+pre.error {
+  color: red;
+}
+
+p.footer {
+  text-align: right;
+  font-size: xx-small;
+  font-weight: lighter;
+  font-style: italic;
+  color: gray;
+}
+
+  </style></head><body><a href="http://www.ee.columbia.edu/~dpwe/">Dan Ellis</a> : <a href="http://www.ee.columbia.edu/~dpwe/resources/">Resources</a>: <a href="http://www.ee.columbia.edu/~dpwe/resources/matlab/">Matlab</a>: <div class="content"> <IMG SRC="tf_agc_thumb.png" ALIGN="LEFT" HSPACE="10"><h1>tf_agc - Time-frequency automatic gain control</h1><!--introduction--><p>This code implements automatic gain control for audio signals, which attempts to apply a smoothly-varying gain to an audio waveform in order to keep its energy close to some target level.  This version also tries to balance the energy in individual frequency bands.  It works by taking the short-time Fourier transform of the signal, smoothing that energy using time and frequency scales specified as arguments, then dividing out that scaled energy.</p><!--/introduction--><h2>Contents</h2><div><ul><li><a href="#1">Example usage</a></li><li><a href="#2">Download</a></li><li><a href="#3">Referencing</a></li><li><a href="#4">Acknowledgment</a></li></ul></div><h2>Example usage<a name="1"></a></h2><pre class="codeinput"><span class="comment">% Load a speech waveform</span>
+[d,sr] = wavread(<span class="string">'speech.wav'</span>);
+<span class="comment">% Run it through the AGC</span>
+[y,D,E] = tf_agc(d,sr);
+<span class="comment">% Listen to the gain-normalized signal</span>
+soundsc(y,sr)
+<span class="comment">% Plot the spectrogram of the input signal</span>
+subplot(311)
+<span class="comment">% (stft is my included version of specgram)</span>
+stft(d,512,512,256,sr)
+<span class="comment">% Show the time-frequency-smoothed energy envelope that has been</span>
+<span class="comment">% normalized out by the AGC</span>
+subplot(312)
+imagesc(20*log10(E)); axis <span class="string">xy</span>
+<span class="comment">% Spectrogram of the resulting, gain-normalized signal</span>
+subplot(313)
+stft(y,512,512,256,sr);
+<span class="comment">%</span>
+<span class="comment">% Other arguments:</span>
+<span class="comment">% Using a shorter time scale for more rapid gain variation</span>
+soundsc(tf_agc(d,sr,0.1),sr);
+<span class="comment">% Using a broader frequency scale, to minimize frequency-dependent</span>
+<span class="comment">% gain variation</span>
+soundsc(tf_agc(d,sr,0.5,10),sr);
+<span class="comment">% Use a narrow time and frequency scale to make signal very close</span>
+<span class="comment">% to white noise</span>
+soundsc(tf_agc(d,sr,0.02,0.1),sr);
+<span class="comment">% Use time-symmetric non-causal smoothing</span>
+soundsc(tf_agc(d,sr,0.5,1.0,1),sr);
+</pre><img vspace="5" hspace="5" src="demo_tf_agc_01.png" alt=""> <h2>Download<a name="2"></a></h2><p>You can download all the code and data for these examples here: <a href="tf_agc.zip">tf_agc.zip</a>.</p><h2>Referencing<a name="3"></a></h2><p>If you use this code in your research and you want to make a reference to where you got it, you can use the following citation:</p><p>D. Ellis (2010), "Time-frequency automatic gain control", web resource, available: <a href="http://labrosa.ee.columbia.edu/matlab/tf_agc/">http://labrosa.ee.columbia.edu/matlab/tf_agc/</a> .</p><h2>Acknowledgment<a name="4"></a></h2><p>This material is based in part upon work supported by the National Science Foundation under Grant No. IIS-0713334, by Eastman Kodak Corp, and by the National Geospatial Intelligence Agency NSERC program.  Any opinions, findings and conclusions or recomendations expressed in this material are those of the author(s) and do not necessarily reflect the views of the sponsors.</p><p>Last updated: $Date: 2010/08/13 15:40:58 $ Dan Ellis <a href="dpwe@ee.columbia.edu">dpwe@ee.columbia.edu</a></p><p class="footer"><br>
+      Published with MATLAB&reg; 7.10<br></p></div><!--
+##### SOURCE BEGIN #####
+%% tf_agc - Time-frequency automatic gain control
+%
+% This code implements automatic gain control for audio signals, 
+% which attempts to apply a smoothly-varying gain to an audio 
+% waveform in order to keep its energy close to some target 
+% level.  This version also tries to balance the energy in 
+% individual frequency bands.  It works by taking the short-time
+% Fourier transform of the signal, smoothing that energy using 
+% time and frequency scales specified as arguments, then dividing 
+% out that scaled energy.
+
+%% Example usage
+
+% Load a speech waveform
+[d,sr] = wavread('speech.wav');
+% Run it through the AGC
+[y,D,E] = tf_agc(d,sr);
+% Listen to the gain-normalized signal
+soundsc(y,sr)
+% Plot the spectrogram of the input signal
+subplot(311)
+% (stft is my included version of specgram)
+stft(d,512,512,256,sr)
+% Show the time-frequency-smoothed energy envelope that has been 
+% normalized out by the AGC
+subplot(312)
+imagesc(20*log10(E)); axis xy
+% Spectrogram of the resulting, gain-normalized signal
+subplot(313)
+stft(y,512,512,256,sr);
+%
+% Other arguments:
+% Using a shorter time scale for more rapid gain variation
+soundsc(tf_agc(d,sr,0.1),sr);
+% Using a broader frequency scale, to minimize frequency-dependent
+% gain variation
+soundsc(tf_agc(d,sr,0.5,10),sr);
+% Use a narrow time and frequency scale to make signal very close
+% to white noise
+soundsc(tf_agc(d,sr,0.02,0.1),sr);
+% Use time-symmetric non-causal smoothing
+soundsc(tf_agc(d,sr,0.5,1.0,1),sr);
+
+
+
+%% Download
+%
+% You can download all the code and data for these examples here:
+% <tf_agc.zip tf_agc.zip>.
+
+%% Referencing
+%
+% If you use this code in your research and you want to make a
+% reference to where you got it, you can use the following
+% citation:
+%
+% D. Ellis (2010), "Time-frequency automatic gain control", web resource, available: http://labrosa.ee.columbia.edu/matlab/tf_agc/ .
+
+%% Acknowledgment
+%
+% This material is based in part upon work supported by the
+% National Science Foundation under Grant No. IIS-0713334, by 
+% Eastman Kodak Corp, and by the National Geospatial Intelligence 
+% Agency NSERC program.  Any opinions, findings and conclusions or
+% recomendations expressed in this material are those of the
+% author(s) and do not necessarily reflect the views of the sponsors.
+%
+% Last updated: $Date: 2010/08/13 15:40:58 $
+% Dan Ellis <dpwe@ee.columbia.edu>
+
+
+
+##### SOURCE END #####
+--></body></html>
